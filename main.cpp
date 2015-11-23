@@ -4,6 +4,7 @@
 #include <iostream>
 #include <fstream>
 #include <assert.h>
+#include <cmath>
 
 #include "log/log.h"
 
@@ -11,6 +12,7 @@ using namespace std;
 
 int g_gl_width = 640;
 int g_gl_height = 480;
+
 
 void glfw_error_callback(int error, const char* description) {
     gl_log_err("GLFW ERROR: code %i msg: %s\n", error, description);
@@ -21,11 +23,9 @@ void glfw_window_size_callback(GLFWwindow* window, int width, int height) {
     g_gl_height = height;
 }
 
-void initGLFWSettings(){
 
 
-
-}
+//tells us which line in which shader is causing the errollo
 
 void _update_fps_count(GLFWwindow * window){
 
@@ -43,59 +43,7 @@ void _update_fps_count(GLFWwindow * window){
         frame_count = 0;
     }
     frame_count++;
-
 }
-
-
-void log_gl_params () {
-    GLenum params[] = {
-            GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS,
-            GL_MAX_CUBE_MAP_TEXTURE_SIZE,
-            GL_MAX_DRAW_BUFFERS,
-            GL_MAX_FRAGMENT_UNIFORM_COMPONENTS,
-            GL_MAX_TEXTURE_IMAGE_UNITS,
-            GL_MAX_TEXTURE_SIZE,
-            GL_MAX_VARYING_FLOATS,
-            GL_MAX_VERTEX_ATTRIBS,
-            GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS,
-            GL_MAX_VERTEX_UNIFORM_COMPONENTS,
-            GL_MAX_VIEWPORT_DIMS,
-            GL_STEREO,
-    };
-    const char* names[] = {
-            "GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS",
-            "GL_MAX_CUBE_MAP_TEXTURE_SIZE",
-            "GL_MAX_DRAW_BUFFERS",
-            "GL_MAX_FRAGMENT_UNIFORM_COMPONENTS",
-            "GL_MAX_TEXTURE_IMAGE_UNITS",
-            "GL_MAX_TEXTURE_SIZE",
-            "GL_MAX_VARYING_FLOATS",
-            "GL_MAX_VERTEX_ATTRIBS",
-            "GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS",
-            "GL_MAX_VERTEX_UNIFORM_COMPONENTS",
-            "GL_MAX_VIEWPORT_DIMS",
-            "GL_STEREO",
-    };
-    gl_log ("GL Context Params:\n");
-    char msg[256];
-    // integers - only works if the order is 0-10 integer return types
-    for (int i = 0; i < 10; i++) {
-        int v = 0;
-        glGetIntegerv (params[i], &v);
-        gl_log ("%s %i \n", names[i], v);
-
-    }
-    // others
-    int v[2];
-    v[0] = v[1] = 0;
-    glGetIntegerv (params[10], v);
-    gl_log ("%s %i %i\n", names[10], v[0], v[1]);
-    unsigned char s = 0;
-    glGetBooleanv (params[11], &s);
-    gl_log ("%s %u\n", names[11], (unsigned int)s);
-    gl_log ("-----------------------------\n");
-}
-
 
 
 int main() {
@@ -111,7 +59,6 @@ int main() {
         fprintf(stderr, "error: could not start GLFW3\n");
         return 1;
     }
-
 
     //note init libraries before setting hints
     glfwWindowHint (GLFW_SAMPLES, 4);
@@ -146,7 +93,12 @@ int main() {
     //only draw if shape is close to the viewer
     glEnable(GL_DEPTH_TEST); //enable depth testing
     glDepthFunc(GL_LESS); //smaller value is closer
-    glClearColor(0.6f, 0.6f, 0.8f, 1.0f);
+//    glClearColor(0.6f, 0.6f, 0.8f, 1.0f);
+
+    glEnable(GL_CULL_FACE);
+    glCullFace(GL_BACK);
+    glFrontFace(GL_CW);
+
 
 
     /** code goes here **/
@@ -156,35 +108,67 @@ int main() {
             -0.5f, -0.5f, 0.0f
     };
 
-    GLuint vbo = 0;
-    glGenBuffers(1, &vbo);
-    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    GLfloat colours[] = {
+            1.0f, 0.0f,  0.0f,
+            0.0f, 1.0f,  0.0f,
+            0.0f, 0.0f,  1.0f
+    };
+
+
+
+    GLuint points_vbo = 0;
+    glGenBuffers(1, &points_vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, points_vbo);
     glBufferData(GL_ARRAY_BUFFER, sizeof(points), points, GL_STATIC_DRAW);
+
+    GLuint colours_vbo = 0;
+    glGenBuffers(1, &colours_vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, colours_vbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(colours), colours, GL_STATIC_DRAW);
 
     GLuint vao = 0;
     glGenVertexArrays(1, &vao);
     glBindVertexArray(vao);
-    glEnableVertexAttribArray(0);
-    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, points_vbo);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, NULL);
+    glBindBuffer(GL_ARRAY_BUFFER, colours_vbo);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, NULL);
+
+    glEnableVertexAttribArray(0);
+    glEnableVertexAttribArray(1);
 
     const char *vertex_shader =
             "#version 400\n"
-                    "in vec3 vp;"
+                    "in vec3 vertex_position;"
+                    "in vec3 vertex_colour;"
+
+                    " out vec3 colour;"
+
                     "void main () {"
-                    "  gl_Position = vec4 (vp, 1.0);"
+                    "  colour = vertex_colour;"
+                    "  gl_Position =vec4 (vertex_position, 1.0);"
                     "}";
 
     const char *fragment_shader =
             "#version 400\n"
+                    "in vec3 colour;"
                     "out vec4 frag_colour;"
                     "void main () {"
-                    "  frag_colour = vec4 (1, 0.0, 0.5, 1.0);"
+                    "  frag_colour = vec4 (colour,1.0);"
                     "}";
 
     GLuint vs = glCreateShader(GL_VERTEX_SHADER);
     glShaderSource(vs, 1, &vertex_shader, NULL);
     glCompileShader(vs);
+
+    //check shader error
+    int params = -1;
+    glGetShaderiv(vs, GL_COMPILE_STATUS ,&params);
+    if (GL_TRUE != params) {
+        fprintf(stderr, "ERROR GL shader index %i did not compile \n", vs);
+        _print_shader_info_log(vs);
+    }
+
     GLuint fs = glCreateShader(GL_FRAGMENT_SHADER);
     glShaderSource(fs, 1, &fragment_shader, NULL);
     glCompileShader(fs);
@@ -192,14 +176,30 @@ int main() {
     GLuint shader_programme = glCreateProgram();
     glAttachShader(shader_programme, fs);
     glAttachShader(shader_programme, vs);
+
+    //
+    glBindAttribLocation(shader_programme, 0, "vertex_position");
+    glBindAttribLocation(shader_programme, 1, "vertex_colour");
+
     glLinkProgram(shader_programme);
 
+    //check for shader linking errors
+    params =-1;
+    glGetProgramiv(shader_programme, GL_LINK_STATUS, &params);
+    if (GL_TRUE != params) {
+        fprintf(stderr, "ERROR: could not link shader programmer GL index %u\n", shader_programme);
+        _print_programme_info_log(shader_programme);
+    }
+
+
     while (!glfwWindowShouldClose(window)) {
+
+        //calculate movement
+
+
         _update_fps_count(window);
         // wipe the drawing surface clear
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        glViewport(0, 0, g_gl_width, g_gl_height);
-
 
         glUseProgram(shader_programme);
         glBindVertexArray(vao);
