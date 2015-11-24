@@ -8,6 +8,8 @@
       <sourceFolder url="file://$MODULE_DIR$/main.cpp" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/utils/maths_funcs.cpp" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/utils/maths_funcs.h" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/utils/shaders.cpp" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/utils/shaders.h" isTestSource="false" />
     </content>
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />

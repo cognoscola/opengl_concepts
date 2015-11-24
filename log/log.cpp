@@ -7,8 +7,9 @@
 #include <stdarg.h>
 #include <stdlib.h>
 #include <GL/glew.h>
+#include <GLFW/glfw3.h>
+#include <assert.h>
 #include "log.h"
-
 
 const char* GL_type_to_string (GLenum type) {
     switch (type) {
@@ -82,6 +83,48 @@ bool gl_log_err(const char* message, ...){
     fclose(file);
     return true;
 
+}
+
+
+bool start_gl () {
+    gl_log ("starting GLFW %s", glfwGetVersionString ());
+
+    glfwSetErrorCallback (glfw_error_callback);
+    if (!glfwInit ()) {
+        fprintf (stderr, "ERROR: could not start GLFW3\n");
+        return false;
+    }
+
+    /*GLFWmonitor* mon = glfwGetPrimaryMonitor ();
+    const GLFWvidmode* vmode = glfwGetVideoMode (mon);
+    window = glfwCreateWindow (
+        vmode->width, vmode->height, "Extended GL Init", mon, NULL
+    );*/
+
+    window = glfwCreateWindow (width, height, "Extended Init.", NULL, NULL  );
+    if (!window) {
+        fprintf (stderr, "ERROR: could not open window with GLFW3\n");
+        glfwTerminate();
+        return false;
+    }
+
+    glfwSetWindowSizeCallback (window, glfw_window_size_callback);
+    glfwMakeContextCurrent (window);
+
+    glfwWindowHint (GLFW_SAMPLES, 4);
+
+    // start GLEW extension handler
+    glewExperimental = GL_TRUE;
+    glewInit ();
+
+    // get version info
+    const GLubyte* renderer = glGetString (GL_RENDERER); // get renderer string
+    const GLubyte* version = glGetString (GL_VERSION); // version as a string
+    printf ("Renderer: %s\n", renderer);
+    printf ("OpenGL version supported %s\n", version);
+    gl_log ("renderer: %s\nversion: %s\n", renderer, version);
+
+    return true;
 }
 
 void _print_shader_info_log(GLuint shader_index){
@@ -173,6 +216,25 @@ void print_all(GLuint program) {
     _print_programme_info_log (program);
 }
 
+void _update_fps_counter (GLFWwindow* window) {
+    static double previous_seconds = glfwGetTime ();
+    static int frame_count;
+    double current_seconds = glfwGetTime ();
+    double elapsed_seconds = current_seconds - previous_seconds;
+    if (elapsed_seconds > 0.25) {
+        previous_seconds = current_seconds;
+        double fps = (double)frame_count / elapsed_seconds;
+        char tmp[128];
+        sprintf (tmp, "opengl @ fps: %.2f", fps);
+        glfwSetWindowTitle (window, tmp);
+        frame_count = 0;
+    }
+    frame_count++;
+}
+
+
+
+
 void log_gl_params () {
     GLenum params[] = {
             GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS,
@@ -219,6 +281,16 @@ void log_gl_params () {
     glGetBooleanv (params[11], &s);
     gl_log ("%s %u\n", names[11], (unsigned int)s);
     gl_log ("-----------------------------\n");
+}
+
+
+//callbacks
+
+void glfw_error_callback(int error, const char* description) {
+    gl_log_err("GLFW ERROR: code %i msg: %s\n", error, description);
+}
+
+void glfw_window_size_callback(GLFWwindow* window, int width, int height) {
 }
 
 

@@ -1,0 +1,428 @@
+#include <GL/glew.h>
+#include <GLFW/glfw3.h>
+
+#include <iostream>
+#include <fstream>
+#include <assert.h>
+#include <cmath>
+
+#include "log/log.h"
+
+using namespace std;
+
+int g_gl_width = 640;
+int g_gl_height = 480;
+
+void glfw_error_callback(int error, const char* description) {
+    gl_log_err("GLFW ERROR: code %i msg: %s\n", error, description);
+}
+
+void glfw_window_size_callback(GLFWwindow* window, int width, int height) {
+    g_gl_width = width;
+    g_gl_height = height;
+}
+
+const char* GL_type_to_string (GLenum type) {
+    switch (type) {
+        case GL_BOOL: return "bool";
+        case GL_INT: return "int";
+        case GL_FLOAT: return "float";
+        case GL_FLOAT_VEC2: return "vec2";
+        case GL_FLOAT_VEC3: return "vec3";
+        case GL_FLOAT_VEC4: return "vec4";
+        case GL_FLOAT_MAT2: return "mat2";
+        case GL_FLOAT_MAT3: return "mat3";
+        case GL_FLOAT_MAT4: return "mat4";
+        case GL_SAMPLER_2D: return "sampler2D";
+        case GL_SAMPLER_3D: return "sampler3D";
+        case GL_SAMPLER_CUBE: return "samplerCube";
+        case GL_SAMPLER_2D_SHADOW: return "sampler2DShadow";
+        default: break;
+    }
+    return "other";
+}
+
+//tells us which line in which shader is causing the error
+void _print_shader_info_log(GLuint shader_index){
+
+    int max_length = 2048;
+    int actual_length = 0;
+    char log[2048];
+    glGetShaderInfoLog(shader_index, max_length, &actual_length, log);
+    printf("Shader info log for GL index %u:\n%s\n", shader_index, log);
+
+}
+
+void _print_programme_info_log(GLuint program){
+
+    int max_length = 2048;
+    int actual_length = 0;
+    char log[2048];
+    glGetProgramInfoLog(program, max_length, &actual_length, log);
+    printf("Program info log for GL index %u:\n%s", program, log);
+
+}
+
+bool is_valid (GLuint programme) {
+    glValidateProgram (programme);
+    int params = -1;
+    glGetProgramiv (programme, GL_VALIDATE_STATUS, &params);
+    printf ("program %i GL_VALIDATE_STATUS = %i\n", programme, params);
+    if (GL_TRUE != params) {
+        _print_programme_info_log (programme);
+        return false;
+    }
+    return true;
+}
+
+void print_all(GLuint program) {
+
+    printf("-----------------\nshader program %i info:\n", program);
+    int params =-1;
+    glGetProgramiv(program, GL_LINK_STATUS, &params);
+    printf("GL_LINK_STATUS = %i\n", params);
+
+    glGetProgramiv(program, GL_ATTACHED_SHADERS, &params);
+    printf("GL_ATTACHED_SHADERS = %i\n", params);
+
+    glGetProgramiv(program, GL_ACTIVE_ATTRIBUTES, &params);
+    printf("GL_ACTIVE_ATTRIBUTES = %i\n", params);
+    for (GLuint i = 0; i < (GLuint) params; i++) {
+        char name[64];
+        int max_length = 64;
+        int actual_length =0;
+        int size =0;
+        GLenum  type;
+        glGetActiveAttrib(program, i, max_length, &actual_length, &size, &type, name);
+        if (size > 1) {
+            for (int j = 0; j < size; j++) {
+                char long_name[64];
+                sprintf(long_name, "%s[%i]", name, j);
+                int location = glGetAttribLocation(program, long_name);
+                printf("  %i) type:%s name:%s location:%i\n", GL_type_to_string(type), long_name, location);
+            }
+        }else{
+            int location = glGetAttribLocation(program, name);
+            printf("  %i) type:%s name:%s location:%i\n", GL_type_to_string(type), name, location);
+        }
+    }
+    glGetProgramiv (program, GL_ACTIVE_UNIFORMS, &params);
+    printf ("GL_ACTIVE_UNIFORMS = %i\n", params);
+    for (GLuint i = 0; i < (GLuint)params; i++) {
+        char name[64];
+        int max_length = 64;
+        int actual_length = 0;
+        int size = 0;
+        GLenum type;
+        glGetActiveUniform (program, i, max_length, &actual_length, &size, &type, name);
+        if (size > 1) {
+            for (int j = 0; j < size; j++) {
+                char long_name[64];
+                sprintf (long_name, "%s[%i]", name, j);
+                int location = glGetUniformLocation (program, long_name);
+                printf ("  %i) type:%s name:%s location:%i\n", i, GL_type_to_string (type), long_name, location);
+            }
+        } else {
+            int location = glGetUniformLocation (program, name);
+            printf ("  %i) type:%s name:%s location:%i\n", i, GL_type_to_string (type), name, location);
+        }
+    }
+    _print_programme_info_log (program);
+
+}
+
+
+void _update_fps_count(GLFWwindow * window){
+
+    static double previous_seconds = glfwGetTime();
+    static int frame_count;
+    double current_seconds = glfwGetTime();
+    double elapsed_seconds = current_seconds - previous_seconds;
+
+    if (elapsed_seconds > 0.25) {
+        previous_seconds = current_seconds;
+        double fps = (double) frame_count / elapsed_seconds;
+        char tmp[128];
+        sprintf(tmp, "opengl @fps: %.2f", fps);
+        glfwSetWindowTitle(window, tmp);
+        frame_count = 0;
+    }
+    frame_count++;
+
+}
+
+
+void log_gl_params () {
+    GLenum params[] = {
+            GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS,
+            GL_MAX_CUBE_MAP_TEXTURE_SIZE,
+            GL_MAX_DRAW_BUFFERS,
+            GL_MAX_FRAGMENT_UNIFORM_COMPONENTS,
+            GL_MAX_TEXTURE_IMAGE_UNITS,
+            GL_MAX_TEXTURE_SIZE,
+            GL_MAX_VARYING_FLOATS,
+            GL_MAX_VERTEX_ATTRIBS,
+            GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS,
+            GL_MAX_VERTEX_UNIFORM_COMPONENTS,
+            GL_MAX_VIEWPORT_DIMS,
+            GL_STEREO,
+    };
+    const char* names[] = {
+            "GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS",
+            "GL_MAX_CUBE_MAP_TEXTURE_SIZE",
+            "GL_MAX_DRAW_BUFFERS",
+            "GL_MAX_FRAGMENT_UNIFORM_COMPONENTS",
+            "GL_MAX_TEXTURE_IMAGE_UNITS",
+            "GL_MAX_TEXTURE_SIZE",
+            "GL_MAX_VARYING_FLOATS",
+            "GL_MAX_VERTEX_ATTRIBS",
+            "GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS",
+            "GL_MAX_VERTEX_UNIFORM_COMPONENTS",
+            "GL_MAX_VIEWPORT_DIMS",
+            "GL_STEREO",
+    };
+    gl_log ("GL Context Params:\n");
+    char msg[256];
+    // integers - only works if the order is 0-10 integer return types
+    for (int i = 0; i < 10; i++) {
+        int v = 0;
+        glGetIntegerv (params[i], &v);
+        gl_log ("%s %i \n", names[i], v);
+    }
+    // others
+    int v[2];
+    v[0] = v[1] = 0;
+    glGetIntegerv (params[10], v);
+    gl_log ("%s %i %i\n", names[10], v[0], v[1]);
+    unsigned char s = 0;
+    glGetBooleanv (params[11], &s);
+    gl_log ("%s %u\n", names[11], (unsigned int)s);
+    gl_log ("-----------------------------\n");
+}
+
+
+
+int main() {
+
+    assert(restart_gl_log());
+    // log the glfw version
+    gl_log("Starting GLFW\n%s\n", glfwGetVersionString());
+    //register an error callback
+    glfwSetErrorCallback(glfw_error_callback);
+
+    //start the glContext and O/S window using the GLFW helper library
+    if (!glfwInit()) {
+        fprintf(stderr, "error: could not start GLFW3\n");
+        return 1;
+    }
+
+
+    //note init libraries before setting hints
+    glfwWindowHint (GLFW_SAMPLES, 4);
+
+    //set to fulll screen mode
+    GLFWmonitor *mon = glfwGetPrimaryMonitor();
+    const GLFWvidmode *vmode = glfwGetVideoMode(mon);
+    GLFWwindow *window = glfwCreateWindow(g_gl_width, g_gl_height, "Extended Gl Init", NULL, NULL);
+    if (!window) {
+        fprintf(stderr, "ERROR:Could not open window with GLFW3\n");
+        glfwTerminate();
+        return 1;
+    }
+
+
+    glfwSetWindowSizeCallback(window, glfw_window_size_callback);
+    glfwMakeContextCurrent(window);
+
+    //start glew extension handle
+    glewExperimental = GL_TRUE;
+    glewInit();
+
+    //get version info
+
+    const GLubyte *renderer = glGetString(GL_RENDERER);
+    const GLubyte *version = glGetString(GL_VERSION);
+
+    printf("Rendere: %s\n", renderer);
+    printf("OpenGL Version Supported %s\n", version);
+    log_gl_params();
+
+    //only draw if shape is close to the viewer
+    glEnable(GL_DEPTH_TEST); //enable depth testing
+    glDepthFunc(GL_LESS); //smaller value is closer
+//    glClearColor(0.6f, 0.6f, 0.8f, 1.0f);
+
+    glEnable(GL_CULL_FACE);
+    glCullFace(GL_BACK);
+    glFrontFace(GL_CW);
+
+
+
+    /** code goes here **/
+    GLfloat points[] = {
+            0.0f, 0.5f, 0.0f,
+            0.5f, -0.5f, 0.0f,
+            -0.5f, -0.5f, 0.0f
+    };
+
+    GLfloat colours[] = {
+            1.0f, 0.0f,  0.0f,
+            0.0f, 1.0f,  0.0f,
+            0.0f, 0.0f,  1.0f
+    };
+
+    float translationMatrix[] = {
+            1.0f, 0.0f, 0.0f, 0.0f, // first column
+            0.0f, 1.0f, 0.0f, 0.0f, // second column
+            0.0f, 0.0f, 1.0f, 0.0f, // third column
+            0.0f, 0.0f, 0.5f, 1.0f // fourth column
+    };
+
+    float scaleMatrix[] = {
+            0.5f, 0.0f, 0.0f, 0.0f, // first column
+            0.0f, 2.0f, 0.0f, 0.0f, // second column
+            0.0f, 0.0f, 1.0f, 0.0f, // third column
+            0.0f, 0.0f, 0.0f, 1.0f // fourth column
+    };
+
+    float rotationMatrix[] = {
+            1.0f, 0.0f, 0.0f, 0.0f, // first column
+            0.0f, cos(1.5), -sin(1.5), 0.0f, // second column
+            0.0f, sin(1.5), cos(1.5), 0.0f, // third column
+            0.0f, 0.0f, 0.0f, 1.0f // fourth column
+    };
+
+
+    GLuint points_vbo = 0;
+    glGenBuffers(1, &points_vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, points_vbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(points), points, GL_STATIC_DRAW);
+
+    GLuint colours_vbo = 0;
+    glGenBuffers(1, &colours_vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, colours_vbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(colours), colours, GL_STATIC_DRAW);
+
+    GLuint vao = 0;
+    glGenVertexArrays(1, &vao);
+    glBindVertexArray(vao);
+    glBindBuffer(GL_ARRAY_BUFFER, points_vbo);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, NULL);
+    glBindBuffer(GL_ARRAY_BUFFER, colours_vbo);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, NULL);
+
+    glEnableVertexAttribArray(0);
+    glEnableVertexAttribArray(1);
+
+    const char *vertex_shader =
+            "#version 400\n"
+                    "in vec3 vertex_position;"
+                    "in vec3 vertex_colour;"
+
+                    "uniform mat4 translationMatrix; "
+                    "uniform mat4 scaleMatrix;"
+                    "uniform mat4 rotationMatrix;"
+
+                    " out vec3 colour;"
+
+                    "void main () {"
+                    "  colour = vertex_colour;"
+                    "  gl_Position =translationMatrix * scaleMatrix * rotationMatrix * vec4 (vertex_position, 1.0);"
+                    "}";
+
+    const char *fragment_shader =
+            "#version 400\n"
+                    "in vec3 colour;"
+                    "out vec4 frag_colour;"
+                    "void main () {"
+                    "  frag_colour = vec4 (colour,1.0);"
+                    "}";
+
+    GLuint vs = glCreateShader(GL_VERTEX_SHADER);
+    glShaderSource(vs, 1, &vertex_shader, NULL);
+    glCompileShader(vs);
+
+    //check shader error
+    int params = -1;
+    glGetShaderiv(vs, GL_COMPILE_STATUS ,&params);
+    if (GL_TRUE != params) {
+        fprintf(stderr, "ERROR GL shader index %i did not compile \n", vs);
+        _print_shader_info_log(vs);
+    }
+
+    GLuint fs = glCreateShader(GL_FRAGMENT_SHADER);
+    glShaderSource(fs, 1, &fragment_shader, NULL);
+    glCompileShader(fs);
+
+    GLuint shader_programme = glCreateProgram();
+    glAttachShader(shader_programme, fs);
+    glAttachShader(shader_programme, vs);
+
+    //
+    glBindAttribLocation(shader_programme, 0, "vertex_position");
+    glBindAttribLocation(shader_programme, 1, "vertex_colour");
+
+
+    glLinkProgram(shader_programme);
+
+    //check for shader linking errors
+    params =-1;
+    glGetProgramiv(shader_programme, GL_LINK_STATUS, &params);
+    if (GL_TRUE != params) {
+        fprintf(stderr, "ERROR: could not link shader programmer GL index %u\n", shader_programme);
+        _print_programme_info_log(shader_programme);
+    }
+
+    float speed = 1.0f;
+    float last_position = 0.0f;
+    int matrix_location = glGetUniformLocation(shader_programme, "translationMatrix");
+    int matrix_scale_location = glGetUniformLocation(shader_programme, "scaleMatrix");
+    int matrix_rotate_location = glGetUniformLocation(shader_programme, "rotationMatrix");
+
+
+    while (!glfwWindowShouldClose(window)) {
+
+        //calculate movement
+        static double previous_seconds = glfwGetTime();
+        double current_seconds = glfwGetTime();
+        double elapsed_seconds = current_seconds - previous_seconds;
+        previous_seconds = current_seconds;
+
+
+        if (fabs(last_position) > 1.0f) {
+            speed = -speed;
+        }
+
+        translationMatrix[14] = elapsed_seconds * speed + last_position;
+        last_position = translationMatrix[14];
+        glUseProgram(shader_programme);
+        glUniformMatrix4fv(matrix_location, 1, GL_FALSE, translationMatrix);
+        glUniformMatrix4fv(matrix_scale_location, 1, GL_FALSE, scaleMatrix);
+        glUniformMatrix4fv(matrix_rotate_location, 1, GL_FALSE, rotationMatrix);
+
+
+        _update_fps_count(window);
+        // wipe the drawing surface clear
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+//        glViewport(0, 0, g_gl_width, g_gl_height);
+
+
+        glBindVertexArray(vao);
+        // draw points 0-3 from the currently bound VAO with current in-use shader
+        glDrawArrays(GL_TRIANGLES, 0, 3);
+        // update other events like input handling
+        glfwPollEvents();
+        // put the stuff we've been drawing onto the display
+        glfwSwapBuffers(window);
+
+        if (GLFW_PRESS == glfwGetKey(window, GLFW_KEY_ESCAPE)) {
+            glfwSetWindowShouldClose(window, 1);
+        }
+    }
+
+    glfwTerminate();
+    cout << "Hello, World!" << endl;
+    return 0;
+}
+
+
